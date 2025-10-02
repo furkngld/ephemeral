@@ -73,7 +73,7 @@ To an outside observer, this entire exchange appears as random data being sent t
 -   Node.js (v18 or later)
 -   npm or yarn
 -   [Unisat Wallet](https://unisat.io/) browser extension
--   Some Bitcoin **Testnet** funds in your Unisat wallet. You can get some from a [Testnet Faucet](https://coinfaucet.eu/en/btc-testnet/).
+-   Some Bitcoin **Testnet** funds in your Unisat wallet. You can get some from a [Testnet Faucet](https://bitcoinfaucet.uo1.net/).
 
 **1. Clone the repository:**
 ```bash
