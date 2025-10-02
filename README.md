@@ -102,21 +102,29 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## Security & Limitations
+## 🛡️ Security & Limitations
 
 -   ⚠️ **Testnet Only:** This is a proof-of-concept and should **ONLY** be used on the Bitcoin Testnet. Do not use a mnemonic associated with real funds.
 -   **Mnemonic Security:** The security of a channel is entirely dependent on the secrecy of the shared mnemonic. Never share it digitally.
+-   **Message Size (Current Implementation):** For this proof-of-concept, messages are inscribed using `OP_RETURN` for its simplicity and efficiency. This currently sets a practical limit of ~80 bytes per message. Support for longer messages is a key part of our **Future Roadmap**.
 -   **Transaction Costs:** Every message is a real Bitcoin transaction and incurs network fees. Our future roadmap explores Layer 2 solutions to drastically reduce costs.
 -   **Indexer Reliance:** The app currently relies on public indexers to find messages. A more robust version would use multiple indexers or a light client.
 
 ## Future Roadmap: The Path Forward
 
-Ephemeral is more than a hackathon project; it's a foundation for truly sovereign communication.
+This proof-of-concept lays the groundwork for a truly sovereign communication tool. Key areas for future development include:
 
--   **State Channels for Messaging:** Implement a Layer 2 solution where hundreds of messages can be exchanged off-chain instantly and for free, with only periodic on-chain "anchor" transactions to ensure immutability. This solves the cost and speed limitations.
--   **Forward Secrecy:** Integrate a Diffie-Hellman key exchange to generate per-message keys, so even if the master mnemonic is compromised, past messages remain secure.
--   **File Sharing:** Extend the protocol to support encrypted, on-chain file inscriptions.
--   **Decentralized Indexing:** Reduce reliance on centralized indexers by integrating with decentralized alternatives or running a client-side light node.
+-   **Layer 2 Messaging via State Channels:**
+    Enable instant, low-cost, off-chain message exchange, using on-chain transactions only for periodic "anchor" commitments. This resolves current speed and cost limitations.
+
+-   **Support for Large Messages & Files:**
+    Overcome the ~80-byte `OP_RETURN` limit by implementing message chunking and support for larger, encrypted file inscriptions.
+
+-   **Forward Secrecy Implementation:**
+    Integrate a Diffie-Hellman key exchange to ensure past conversations remain secure even if the master mnemonic is compromised.
+
+-   **Decentralized Indexing:**
+    Enhance privacy and censorship resistance by reducing reliance on centralized indexers, moving towards client-side solutions.
 
 ---
 ## License
