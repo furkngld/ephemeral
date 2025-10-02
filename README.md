@@ -1,4 +1,5 @@
-# Ephemeral Protocol
+
+# <img src="https://raw.githubusercontent.com/furkngld/ephemeral/refs/heads/main/src/app/favicon.ico" width="35" style="vertical-align: middle;"> Ephemeral Protocol 
 
 ### Deniable, Uncensorable, One-Shot Messaging on Bitcoin.
 
