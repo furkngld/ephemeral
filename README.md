@@ -63,8 +63,8 @@ Imagine a key that doesn't open one lock, but creates an entire secret room that
 |           |              |                         |           |              |
 |           v              |                         |           v              |
 | [ Identical Keys & ]     |                         | [ Identical Keys & ]     |
-| [  Address List    ]     | <------ SYNCED VIA -----> | [  Address List    ]     |
-|                          |       BITCOIN CHAIN       |                          |
+| [  Address List    ]     | <----- SYNCED VIA ----> | [  Address List    ]     |
+|                          |      BITCOIN CHAIN      |                          |
 +--------------------------+                         +--------------------------+
 ```
 Because both Alice and Bob start with the **same secret phrase**, the app on their devices generates the **exact same encryption keys and the exact same list of secret "mailbox" addresses**. They are looking at the same invisible map, synchronized only by the math of Bitcoin.
