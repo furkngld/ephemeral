@@ -10,8 +10,12 @@ Two parties, sharing nothing but a **12-word secret phrase**, can establish an e
 
 This project was built for the **Weapons of Liberation - Freedom Apps on Bitcoin** hackathon.
 
-![Ephemeral Protocol Showcase](<img width="1920" height="919" alt="screencapture-ephemeral-labs-vercel-app-2025-10-02-10_53_39" src="https://github.com/user-attachments/assets/99f5851d-b6bf-49fa-a9e4-e6e69162b208" />
-)
+---
+
+## Ephemeral Protocol Showcase
+
+<img width="1920" height="919" alt="screencapture-ephemeral-labs-vercel-app-2025-10-02-10_53_39" src="https://github.com/user-attachments/assets/5f512050-34d8-4acd-9bc0-b78b3dc10e94" />
+<img width="1920" height="924" alt="screencapture-ephemeral-labs-vercel-app-2025-10-02-11_11_33" src="https://github.com/user-attachments/assets/ee4d43df-62e4-4c94-8979-7e00a23b0908" />
 
 ---
 
@@ -122,5 +126,5 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 In short, this means you are free to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the software, provided that the original copyright notice and this permission notice are included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
-
+---
 Built with ❤️ for a free and open internet.
