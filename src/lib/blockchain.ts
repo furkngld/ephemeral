@@ -5,6 +5,7 @@ export type SimulatedInscription = {
   address: string;
   payload: string;
   timestamp: number;
+  senderAddress?: string;
 };
 
 const STORAGE_PREFIX = "ephemeral::inbox::";
@@ -20,7 +21,6 @@ function requireBrowserStorage() {
 }
 
 function requireCrypto() {
-  // Ensure we're in browser environment
   if (typeof window === "undefined") {
     throw new Error("Web Crypto API is not available in this environment.");
   }
@@ -73,9 +73,7 @@ function persistInscriptions(key: string, data: SimulatedInscription[]) {
   storage.setItem(key, JSON.stringify(data));
 }
 
-/**
- * Extracts OP_RETURN data from transaction hex
- */
+
 function extractOpReturnData(txHex: string): string | null {
   try {
     const transaction = bitcoin.Transaction.fromHex(txHex);
@@ -105,10 +103,7 @@ function extractOpReturnData(txHex: string): string | null {
   }
 }
 
-/**
- * Fetches real Bitcoin Testnet transactions for given addresses
- * Uses mempool.space API and extracts OP_RETURN payloads
- */
+
 async function fetchRealBlockchainTransactions(
   addresses: string[],
 ): Promise<SimulatedInscription[]> {
@@ -117,8 +112,8 @@ async function fetchRealBlockchainTransactions(
   }
 
   const results: SimulatedInscription[] = [];
+  const addressSet = new Set(addresses.map(a => a.toLowerCase()));
 
-  // Fetch transactions for each address from mempool.space testnet API
   for (const address of addresses) {
     try {
       const response = await fetch(
@@ -138,9 +133,13 @@ async function fetchRealBlockchainTransactions(
           scriptpubkey?: string;
           value: number;
         }>;
+        vin: Array<{
+          prevout?: {
+            scriptpubkey_address?: string;
+          };
+        }>;
       }>;
 
-      // Look for transactions sent TO this address
       for (const tx of txs) {
         const isRecipient = tx.vout.some(
           (output) => output.scriptpubkey_address === address,
@@ -149,10 +148,14 @@ async function fetchRealBlockchainTransactions(
         if (!isRecipient) {
           continue;
         }
+        
+        let senderAddress: string | undefined;
+        if (tx.vin && tx.vin.length > 0 && tx.vin[0].prevout?.scriptpubkey_address) {
+          senderAddress = tx.vin[0].prevout.scriptpubkey_address;
+        }
 
         const confirmed = Boolean(tx.status.confirmed);
 
-        // Allow unconfirmed mempool transactions so recipients can read messages instantly
         try {
           const txHexResponse = await fetch(
             `https://mempool.space/testnet/api/tx/${tx.txid}/hex`,
@@ -175,7 +178,6 @@ async function fetchRealBlockchainTransactions(
           let timestampMs = (tx.status.block_time ?? 0) * 1000;
 
           if (!timestampMs) {
-            // Unconfirmed transactions won't have a block timestamp; fetch metadata for a deterministic fallback
             try {
               const metadataResponse = await fetch(
                 `https://mempool.space/testnet/api/tx/${tx.txid}`,
@@ -216,6 +218,7 @@ async function fetchRealBlockchainTransactions(
 
           console.info(
             `[Blockchain] Found payload in tx ${tx.txid} (${confirmed ? 'confirmed' : 'mempool'})`,
+            senderAddress ? `from ${senderAddress}` : ''
           );
 
           results.push({
@@ -223,6 +226,7 @@ async function fetchRealBlockchainTransactions(
             address,
             payload: opReturnData,
             timestamp: timestampMs,
+            senderAddress,
           });
         } catch (txError) {
           console.warn(`Failed to process transaction ${tx.txid}:`, txError);
@@ -244,7 +248,6 @@ export async function fetchSimulatedInscriptions(
     return [] as SimulatedInscription[];
   }
 
-  // Fetch ONLY from real blockchain (cross-device compatible)
   const results: SimulatedInscription[] = [];
 
   try {
@@ -256,7 +259,6 @@ export async function fetchSimulatedInscriptions(
     console.error('[Blockchain] Failed to fetch transactions:', error);
   }
 
-  // Optionally, check localStorage as fallback for local testing
   const storage = requireBrowserStorage();
   if (storage && results.length === 0) {
     console.info('[Blockchain] No blockchain results, checking localStorage fallback...');
@@ -303,7 +305,6 @@ export async function enqueueSimulatedInbound(
 }
 
 if (typeof window !== "undefined") {
-  // Makes it easy to enqueue inbound messages from the browser console during demos.
   (window as typeof window & {
     EphemeralSim?: {
       enqueueInbound: typeof enqueueSimulatedInbound;
