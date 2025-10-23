@@ -55,13 +55,14 @@ export function MessageBubble({
       : 'text-rose-200'
     : null;
 
-  const txLink = inscriptionResult?.txid
-    ? `https://mempool.space/testnet/tx/${inscriptionResult.txid}`
-    : null;
+  const txid = message.txid ?? inscriptionResult?.txid;
+  const txLink = txid ? `https://mempool.space/testnet/tx/${txid}` : null;
 
   const statusCopy = inscriptionResult
     ? inscriptionResult.error ?? inscriptionResult.message ?? null
     : null;
+
+  const isAlreadyInscribed = Boolean(message.txid);
 
   const handleCopy = async (value: string) => {
     try {
@@ -111,7 +112,7 @@ export function MessageBubble({
             >
               Copy encrypted
             </button>
-            {isOwn ? (
+            {isOwn && !isAlreadyInscribed ? (
               <button
                 type="button"
                 onClick={onInscribe}
@@ -121,9 +122,32 @@ export function MessageBubble({
                 {isInscribing ? 'Inscribing…' : 'Inscribe via UniSat'}
               </button>
             ) : null}
+            {isOwn && isAlreadyInscribed && txLink ? (
+              <a
+                href={txLink}
+                target="_blank"
+                rel="noreferrer"
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition ${walletButtonClasses}`}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                View on mempool
+              </a>
+            ) : null}
           </footer>
 
-          {isOwn && (statusCopy || txLink) ? (
+          {isOwn && isAlreadyInscribed && !statusCopy ? (
+            <div className="rounded-2xl border border-white/10 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-100/90">
+              <div className="flex items-start gap-2">
+                <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-emerald-50/80" />
+                <div className="space-y-1">
+                  <p className="font-medium">✓ Already on blockchain</p>
+                  <p className="text-emerald-100/70">This message was found on Bitcoin Testnet</p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          
+          {isOwn && (statusCopy || (txLink && inscriptionResult)) ? (
             <div
               className={`rounded-2xl border border-white/10 px-4 py-3 text-xs ${resultTone ?? 'text-emerald-100/80'}`}
             >
@@ -131,7 +155,7 @@ export function MessageBubble({
                 <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-emerald-50/80" />
                 <div className="space-y-1">
                   {statusCopy ? <p>{statusCopy}</p> : null}
-                  {txLink ? (
+                  {txLink && inscriptionResult ? (
                     <a
                       className="inline-flex items-center gap-2 font-mono text-[11px] text-emerald-50 underline-offset-4 hover:underline"
                       href={txLink}
