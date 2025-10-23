@@ -27,6 +27,7 @@ export type EphemeralMessage = {
   address: string;
   timestamp: number;
   txid?: string;
+  senderAddress?: string;
 };
 
 export type OutboundInstruction = {
@@ -515,6 +516,7 @@ async function decryptInscription(
     address: inscription.address,
     timestamp: inscription.timestamp,
     txid: inscription.id,
+    senderAddress: inscription.senderAddress,
   } satisfies EphemeralMessage;
 }
 
@@ -967,6 +969,44 @@ export function EphemeralProvider({
       setIsLoading(false);
     }
   }, [addresses, secret, walletAddress]);
+
+  useEffect(() => {
+    if (!walletAddress || !secret || !addresses.length || messagesRef.current.length === 0) {
+      return;
+    }
+
+    console.info('[Ephemeral] Wallet address changed, re-evaluating message directions...');
+
+    const addressSet = new Set([
+      ...addresses.map(a => a.toLowerCase()),
+      walletAddress.toLowerCase(),
+    ]);
+
+    let hasChanges = false;
+    const updatedMessages = messagesRef.current.map((msg) => {
+      if (msg.senderAddress && msg.txid) {
+        const isSentByUs = addressSet.has(msg.senderAddress.toLowerCase());
+        const shouldBeOutbound = isSentByUs;
+        const currentlyOutbound = msg.direction === 'outbound';
+
+        if (shouldBeOutbound !== currentlyOutbound) {
+          hasChanges = true;
+          return {
+            ...msg,
+            direction: shouldBeOutbound ? ('outbound' as const) : ('inbound' as const),
+          };
+        }
+      }
+      return msg;
+    });
+
+    if (hasChanges) {
+      console.info('[Ephemeral] Updated message directions based on wallet address');
+      const sorted = sortMessages(updatedMessages);
+      messagesRef.current = sorted;
+      setMessages(sorted);
+    }
+  }, [walletAddress, secret, addresses]);
 
   const inscribeWithWallet = useCallback(
     async ({ id, address, payload }: InscribeRequest) => {
