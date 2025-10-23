@@ -26,6 +26,7 @@ export type EphemeralMessage = {
   encrypted: string;
   address: string;
   timestamp: number;
+  txid?: string;
 };
 
 export type OutboundInstruction = {
@@ -158,13 +159,10 @@ const EXCLUDED_INSCRIBE_KEYWORDS = [
 function shouldSkipInscribeHandler(label: string) {
   const normalized = label.replace(/[^a-z0-9]/gi, '').toLowerCase();
   
-  // Only skip if it contains order/brc20/ticker keywords
-  // BUT allow plain "inscribe" methods even if they contain other text
   const hasExcludedKeyword = EXCLUDED_INSCRIBE_KEYWORDS.some((keyword) => 
     normalized.includes(keyword)
   );
   
-  // If it has an excluded keyword, make sure it's not just a simple inscribe method
   if (hasExcludedKeyword) {
     const isSimpleInscribe = normalized === 'inscribe' || 
                             normalized.endsWith('inscribe') ||
@@ -262,8 +260,6 @@ function expandRequestMethodVariants(label: string) {
   return Array.from(variants).filter(Boolean);
 }
 
-// Kept for future reference - UniSat API is currently broken for text inscriptions
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function invokeUniSatInscribe(
   unisat: UniSatWallet,
   options: UniSatInscribeOptions,
@@ -417,14 +413,12 @@ async function invokeUniSatInscribe(
     }
 
     const payloadVariants: UniSatInscribeOptions[] = [
-      // Primary payload without options to avoid BRC-20 detection
       {
         address: options.address,
         content: options.content,
         contentType: options.contentType,
         feeRate: options.feeRate,
       },
-      // Fallback with original options if needed
       options,
     ];
 
@@ -495,6 +489,8 @@ function sortMessages(messages: EphemeralMessage[]) {
 async function decryptInscription(
   secret: string,
   inscription: SimulatedInscription,
+  userAddresses: string[],
+  walletAddress?: string | null,
 ) {
   const decrypted = await decryptMessage(secret, inscription.payload);
 
@@ -502,13 +498,23 @@ async function decryptInscription(
     return null;
   }
 
+  const addressSet = new Set(userAddresses.map(a => a.toLowerCase()));
+  
+  if (walletAddress) {
+    addressSet.add(walletAddress.toLowerCase());
+  }
+  
+  const isSentByUs = inscription.senderAddress && 
+                     addressSet.has(inscription.senderAddress.toLowerCase());
+
   return {
     id: inscription.id,
-    direction: 'inbound' as const,
+    direction: isSentByUs ? ('outbound' as const) : ('inbound' as const),
     content: decrypted,
     encrypted: inscription.payload,
     address: inscription.address,
     timestamp: inscription.timestamp,
+    txid: inscription.id,
   } satisfies EphemeralMessage;
 }
 
@@ -532,6 +538,7 @@ export function EphemeralProvider({
   const [inscribing, setInscribing] = useState<Record<string, boolean>>({});
   const [inscriptionResults, setInscriptionResults] =
     useState<Record<string, InscriptionResult>>({});
+  const messagesRef = useRef<EphemeralMessage[]>([]);
 
   const seenInscriptionIds = useRef<Set<string>>(new Set());
 
@@ -661,12 +668,13 @@ export function EphemeralProvider({
   }, []);
 
   const login = useCallback(async (rawSecret: string) => {
-    // Ensure we're in browser environment before attempting crypto operations
     if (typeof window === 'undefined') {
       setError('Login must be performed in a browser environment.');
       setIsLoggedIn(false);
       return;
     }
+
+    const currentWalletAddress = walletAddress;
 
     const normalised = normaliseMnemonic(rawSecret);
     const words = normalised.split(' ');
@@ -698,7 +706,7 @@ export function EphemeralProvider({
       const decryptedMessages = (
         await Promise.all(
           inscriptions.map((inscription) =>
-            decryptInscription(normalised, inscription),
+            decryptInscription(normalised, inscription, derivedAddresses, currentWalletAddress),
           ),
         )
       ).filter(Boolean) as EphemeralMessage[];
@@ -707,9 +715,11 @@ export function EphemeralProvider({
         decryptedMessages.map((message) => message.id),
       );
 
+      const sortedMessages = sortMessages(decryptedMessages);
       setSecret(normalised);
       setAddresses(derivedAddresses);
-      setMessages(sortMessages(decryptedMessages));
+      setMessages(sortedMessages);
+      messagesRef.current = sortedMessages;
       setPendingOutbound([]);
       setIsLoggedIn(true);
       setError(null);
@@ -720,12 +730,13 @@ export function EphemeralProvider({
       setSecret(null);
       setAddresses([]);
       setMessages([]);
+      messagesRef.current = [];
       setPendingOutbound([]);
       seenInscriptionIds.current = new Set();
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [walletAddress]);
 
   const sendMessage = useCallback(
     async (rawMessage: string) => {
@@ -747,30 +758,28 @@ export function EphemeralProvider({
 
       try {
         const encrypted = await encryptMessage(secret, message);
-        let targetAddress = addresses[0];
+        const outboundCount = messagesRef.current.filter(
+          (item) => item.direction === 'outbound',
+        ).length;
+        const targetIndex = outboundCount % addresses.length;
+        const targetAddress = addresses[targetIndex] ?? addresses[0];
         const timestamp = Date.now();
         const id =
           globalThis.crypto?.randomUUID?.() ??
           Math.random().toString(36).slice(2, 10);
+        const newMessage: EphemeralMessage = {
+          id,
+          direction: 'outbound',
+          content: message,
+          encrypted,
+          address: targetAddress,
+          timestamp,
+        };
 
         setMessages((prev) => {
-          const outboundCount = prev.filter(
-            (item) => item.direction === 'outbound',
-          ).length;
-          targetAddress =
-            addresses[outboundCount % addresses.length] ?? addresses[0];
-
-          return sortMessages([
-            ...prev,
-            {
-              id,
-              direction: 'outbound',
-              content: message,
-              encrypted,
-              address: targetAddress,
-              timestamp,
-            },
-          ]);
+          const next = sortMessages([...prev, newMessage]);
+          messagesRef.current = next;
+          return next;
         });
 
         setPendingOutbound((prev) => [
@@ -821,19 +830,20 @@ export function EphemeralProvider({
           Math.random().toString(36).slice(2, 10);
         const resolvedAddress = address?.trim() || addresses[0] || 'unknown-address';
 
-        setMessages((prev) =>
-          sortMessages([
-            ...prev,
-            {
-              id,
-              direction: 'inbound',
-              content: decrypted,
-              encrypted: trimmedPayload,
-              address: resolvedAddress,
-              timestamp,
-            },
-          ]),
-        );
+        const inboundMessage: EphemeralMessage = {
+          id,
+          direction: 'inbound',
+          content: decrypted,
+          encrypted: trimmedPayload,
+          address: resolvedAddress,
+          timestamp,
+        };
+
+        setMessages((prev) => {
+          const next = sortMessages([...prev, inboundMessage]);
+          messagesRef.current = next;
+          return next;
+        });
 
         setError(null);
         return true;
@@ -856,6 +866,8 @@ export function EphemeralProvider({
     }
 
     setIsLoading(true);
+    
+    const currentWalletAddress = walletAddress;
 
     try {
       const inscriptions = await fetchSimulatedInscriptions(secret, addresses);
@@ -872,7 +884,7 @@ export function EphemeralProvider({
               return null;
             }
 
-            const decrypted = await decryptInscription(secret, inscription);
+            const decrypted = await decryptInscription(secret, inscription, addresses, currentWalletAddress);
 
             if (!decrypted) {
               return null;
@@ -885,17 +897,76 @@ export function EphemeralProvider({
       ).filter(Boolean) as EphemeralMessage[];
 
       if (candidates.length) {
-        setMessages((prev) => sortMessages([...prev, ...candidates]));
-      }
+        const existingEncrypted = new Set(
+          messagesRef.current.map((msg) => msg.encrypted),
+        );
+        const seenInBatch = new Set<string>();
+        const outboundMatches: Array<{ id: string; timestamp: number }> = [];
+        const newMessages: EphemeralMessage[] = [];
 
-      setError(null);
+        for (const candidate of candidates) {
+          const encryptedKey = candidate.encrypted;
+          
+          if (existingEncrypted.has(encryptedKey) || seenInBatch.has(encryptedKey)) {
+            const outboundMatch = messagesRef.current.find(
+              (msg) =>
+                msg.direction === 'outbound' && msg.encrypted === encryptedKey,
+            );
+
+            if (outboundMatch) {
+              outboundMatches.push({
+                id: outboundMatch.id,
+                timestamp: candidate.timestamp,
+              });
+            }
+            continue;
+          }
+
+          newMessages.push(candidate);
+          seenInBatch.add(encryptedKey);
+        }
+
+        if (outboundMatches.length) {
+          const ackIds = new Set(outboundMatches.map((item) => item.id));
+
+          if (ackIds.size) {
+            setPendingOutbound((prev) =>
+              prev.filter((item) => !ackIds.has(item.id)),
+            );
+          }
+        }
+
+        if (outboundMatches.length || newMessages.length) {
+          const matchMap = new Map(
+            outboundMatches.map((item) => [item.id, item.timestamp]),
+          );
+
+          const updatedBase = messagesRef.current.map((msg) => {
+            const matchTimestamp = matchMap.get(msg.id);
+
+            if (matchTimestamp === undefined || msg.timestamp <= matchTimestamp) {
+              return msg;
+            }
+
+            return { ...msg, timestamp: matchTimestamp };
+          });
+
+          const combined = newMessages.length
+            ? [...updatedBase, ...newMessages]
+            : updatedBase;
+
+          const sorted = sortMessages(combined);
+          messagesRef.current = sorted;
+          setMessages(sorted);
+        }
+      }
     } catch (err) {
       console.error('Messages could not be fetched', err);
       setError('We could not read inscriptions from the chain.');
     } finally {
       setIsLoading(false);
     }
-  }, [addresses, secret]);
+  }, [addresses, secret, walletAddress]);
 
   const inscribeWithWallet = useCallback(
     async ({ id, address, payload }: InscribeRequest) => {
@@ -979,7 +1050,6 @@ export function EphemeralProvider({
 
         setWalletNetwork(normalizedNetwork);
         
-        // Create transaction with OP_RETURN for cross-device payload delivery
         console.info('[Ephemeral] Creating OP_RETURN transaction');
         console.info('Target Address:', address);
         console.info('Payload Length:', trimmedPayload.length, 'bytes');
@@ -997,7 +1067,6 @@ export function EphemeralProvider({
         }
         
         try {
-          // Fetch UTXOs for the sender
           const { fetchUtxos, buildOpReturnTransaction } = await import('@/lib/psbt-builder');
           const utxos = await fetchUtxos(primaryAccount);
           
@@ -1007,23 +1076,20 @@ export function EphemeralProvider({
           
           console.info(`[Ephemeral] Found ${utxos.length} UTXOs`);
           
-          // Build unsigned PSBT with OP_RETURN
           const unsignedPsbt = await buildOpReturnTransaction(
             primaryAccount,
             address,
             trimmedPayload,
             utxos,
-            12, // fee rate
+            12,
           );
           
           console.info('[Ephemeral] PSBT created, requesting signature...');
           
-          // Sign with UniSat
           const signedPsbt = await window.unisat.signPsbt(unsignedPsbt);
           
           console.info('[Ephemeral] PSBT signed, broadcasting...');
           
-          // Broadcast to network
           const txid = await window.unisat.pushPsbt(signedPsbt);
           
           if (!txid) {
